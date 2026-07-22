@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="ring" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#5bed83"/>
+      <stop offset="1" stop-color="#22c95a"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#30363d" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <rect x="76" y="66" width="872" height="872" rx="214" fill="#ffffff" stroke="#e3e7eb" stroke-width="8"/>
+  </g>
+  <circle cx="512" cy="502" r="260" fill="none" stroke="#e7eaee" stroke-width="82"/>
+  <circle cx="512" cy="502" r="260" fill="none" stroke="url(#ring)" stroke-width="82" stroke-linecap="round" stroke-dasharray="1225 1634" transform="rotate(-90 512 502)"/>
+  <circle cx="512" cy="502" r="154" fill="#f7f9fa"/>
+  <path d="M512 502 L650 382" fill="none" stroke="#252a31" stroke-width="42" stroke-linecap="round"/>
+  <circle cx="512" cy="502" r="42" fill="#252a31"/>
+  <circle cx="512" cy="502" r="18" fill="#ffffff"/>
+</svg>

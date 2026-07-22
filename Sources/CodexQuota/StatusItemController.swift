@@ -1,0 +1,193 @@
+import AppKit
+import CodexQuotaCore
+import Foundation
+
+@MainActor
+final class StatusItemController: NSObject, NSPopoverDelegate {
+    private let statusItem: NSStatusItem
+    private let popover = NSPopover()
+    private let popoverController = QuotaPopoverViewController()
+    private var currentState: QuotaState = .loading
+    private var refreshInterval: RefreshIntervalOption = .oneMinute
+    private var outsideClickMonitor: Any?
+
+    override init() {
+        statusItem = NSStatusBar.system.statusItem(withLength: 60)
+        super.init()
+        statusItem.isVisible = false
+
+        popoverController.onPreferredContentSizeChanged = { [weak self] size in
+            self?.popover.contentSize = size
+        }
+        popover.behavior = .transient
+        popover.animates = true
+        popover.delegate = self
+        popover.contentViewController = popoverController
+        _ = popoverController.view
+        popover.contentSize = popoverController.preferredContentSize
+
+        if let button = statusItem.button {
+            button.target = self
+            button.action = #selector(togglePopover)
+            button.imagePosition = .imageOnly
+            button.imageScaling = .scaleNone
+            button.toolTip = "点击查看 Codex 额度详情"
+        }
+    }
+
+    func configureActions(
+        onRefresh: @escaping () -> Void,
+        onIntervalChanged: @escaping (RefreshIntervalOption) -> Void,
+        onLoginItemChanged: @escaping (Bool) -> Void,
+        onQuit: @escaping () -> Void
+    ) {
+        popoverController.onRefresh = onRefresh
+        popoverController.onIntervalChanged = { [weak self] option in
+            self?.refreshInterval = option
+            onIntervalChanged(option)
+        }
+        popoverController.onLoginItemChanged = { [weak self] enabled in
+            onLoginItemChanged(enabled)
+            self?.updatePopover()
+        }
+        popoverController.onQuit = onQuit
+    }
+
+    func show(
+        state: QuotaState,
+        refreshInterval: RefreshIntervalOption
+    ) {
+        update(state: state, refreshInterval: refreshInterval)
+        statusItem.isVisible = true
+    }
+
+    func hide() {
+        closePopover()
+        statusItem.isVisible = false
+    }
+
+    func update(
+        state: QuotaState,
+        refreshInterval: RefreshIntervalOption
+    ) {
+        currentState = state
+        self.refreshInterval = refreshInterval
+        guard let button = statusItem.button else { return }
+
+        switch state {
+        case .loading:
+            button.image = drawIndicator(percent: nil)
+            button.setAccessibilityLabel("Codex 周额度正在读取，点击查看详情")
+        case let .available(quota):
+            button.image = drawIndicator(percent: quota.remainingPercent)
+            button.setAccessibilityLabel(
+                "Codex 周额度剩余 \(quota.remainingPercent)%，点击查看详情"
+            )
+        case let .unavailable(message):
+            button.image = drawIndicator(percent: nil)
+            button.setAccessibilityLabel("Codex 周额度读取失败：\(message)，点击查看详情")
+        }
+
+        if popover.isShown {
+            updatePopover()
+        }
+    }
+
+    @objc private func togglePopover() {
+        guard let button = statusItem.button else { return }
+        if popover.isShown {
+            closePopover()
+            return
+        }
+
+        updatePopover()
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        startOutsideClickMonitor()
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        stopOutsideClickMonitor()
+    }
+
+    private func startOutsideClickMonitor() {
+        guard outsideClickMonitor == nil else { return }
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.closePopover()
+            }
+        }
+    }
+
+    private func stopOutsideClickMonitor() {
+        guard let outsideClickMonitor else { return }
+        NSEvent.removeMonitor(outsideClickMonitor)
+        self.outsideClickMonitor = nil
+    }
+
+    private func closePopover() {
+        if popover.isShown {
+            popover.performClose(nil)
+        }
+        stopOutsideClickMonitor()
+    }
+
+    private func updatePopover() {
+        popoverController.update(
+            state: currentState,
+            interval: refreshInterval,
+            loginItemState: LoginItemRegistrar.currentState()
+        )
+    }
+
+    private func drawIndicator(percent: Int?) -> NSImage {
+        let size = NSSize(width: 56, height: 16)
+        let image = NSImage(size: size, flipped: false) { rect in
+            let activeColor = percent.map { self.color(for: $0) } ?? NSColor.tertiaryLabelColor
+            let filledCount = percent.map(QuotaPresentation.filledSegmentCount) ?? 0
+            let barWidth: CGFloat = 3
+            let barHeight: CGFloat = 6
+            let spacing: CGFloat = 2
+            let startX: CGFloat = 1
+            let startY = (rect.height - barHeight) / 2
+
+            for index in 0..<5 {
+                let x = startX + CGFloat(index) * (barWidth + spacing)
+                let barRect = NSRect(x: x, y: startY, width: barWidth, height: barHeight)
+                let path = NSBezierPath(roundedRect: barRect, xRadius: 1.5, yRadius: 1.5)
+                (index < filledCount ? activeColor : NSColor.tertiaryLabelColor).setFill()
+                path.fill()
+            }
+
+            let text = percent.map { "\($0)%" } ?? "--%"
+            let textFont: NSFont = text.count >= 4
+                ? .systemFont(ofSize: 11, weight: .semibold, width: .condensed)
+                : .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: textFont,
+                .foregroundColor: activeColor,
+            ]
+            let textSize = text.size(withAttributes: attributes)
+            let textPoint = NSPoint(
+                x: 29,
+                y: (rect.height - textSize.height) / 2
+            )
+            text.draw(at: textPoint, withAttributes: attributes)
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    private func color(for percent: Int) -> NSColor {
+        switch QuotaPresentation.colorBand(for: percent) {
+        case .healthy:
+            return .systemGreen
+        case .warning:
+            return .systemOrange
+        case .critical:
+            return .systemRed
+        }
+    }
+}

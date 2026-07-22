@@ -1,0 +1,9 @@
+.build/
+.swiftpm/
+work/
+.DS_Store
+outputs/
+preview/
+CONTEXT.md
+lessons.md
+*.dmg
