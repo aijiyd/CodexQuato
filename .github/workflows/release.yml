@@ -1,0 +1,39 @@
+name: 发布 DMG
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+
+      - name: 读取版本号
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: 运行测试
+        run: swift test
+
+      - name: 构建 DMG
+        run: ./Scripts/package_dmg.sh
+
+      - name: 生成校验文件
+        run: shasum -a 256 "outputs/CodexQuota-$VERSION.dmg" > "outputs/CodexQuota-$VERSION.dmg.sha256"
+
+      - name: 创建 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "outputs/CodexQuota-$VERSION.dmg" \
+            "outputs/CodexQuota-$VERSION.dmg.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Codex 额度监控 $VERSION" \
+            --notes-file CHANGELOG.md

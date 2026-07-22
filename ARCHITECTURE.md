@@ -35,6 +35,7 @@ AppMain
 | `Scripts/package_app.sh` | Release 构建、组装 `.app`、临时签名、校验和压缩。 |
 | `Scripts/package_preview.sh` | 构建独立 bundle id 的预览应用，不覆盖正式 ZIP。 |
 | `Scripts/package_dmg.sh` | 生成带应用拖拽入口的HFS磁盘映像，并完成SHA-256校验。 |
+| `.github/workflows/release.yml` | 收到版本标签后，在GitHub的macOS构建机上测试、打包并发布DMG。 |
 | `Tests/CodexQuotaCoreTests/RateLimitParserTests.swift` | 验证周额度解析和所有明确失败分支。 |
 | `Tests/CodexQuotaCoreTests/QuotaPresentationTests.swift` | 验证颜色、短条和应用识别边界。 |
 | `Tests/CodexQuotaCoreTests/CodexRateLimitClientTests.swift` | 用本地测试进程验证初始化、读取、超时、退出、重连和可选真实冒烟测试。 |

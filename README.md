@@ -63,6 +63,8 @@ swift test
 
 生成文件：`outputs/CodexQuota-1.3.0.dmg`。
 
+推送形如 `v1.3.0` 的版本标签后，GitHub Actions 会在 macOS 构建机上重新运行测试、生成 DMG，并自动上传到对应 Release。
+
 1. 解压 ZIP。
 2. 将 `CodexQuota.app` 拖入 `/Applications`。
 3. 启动一次；如果 macOS 提示需要批准登录项，按提示在系统设置中允许。
