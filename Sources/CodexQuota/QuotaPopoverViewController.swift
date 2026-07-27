@@ -8,7 +8,6 @@ final class QuotaPopoverViewController: NSViewController {
     var onIntervalChanged: ((RefreshIntervalOption) -> Void)?
     var onLoginItemChanged: ((Bool) -> Void)?
     var onQuit: (() -> Void)?
-    var onPreferredContentSizeChanged: ((NSSize) -> Void)?
 
     private let resetLabel = NSTextField(wrappingLabelWithString: "额度重置：正在读取")
     private let resetCreditCountLabel = NSTextField(labelWithString: "重置卡：正在读取")
@@ -193,8 +192,6 @@ final class QuotaPopoverViewController: NSViewController {
         let size = NSSize(width: Self.panelWidth, height: height)
         guard size != preferredContentSize else { return }
         preferredContentSize = size
-        view.frame.size = size
-        onPreferredContentSizeChanged?(size)
     }
 
     private func updateLoginItem(state: LoginItemState) {

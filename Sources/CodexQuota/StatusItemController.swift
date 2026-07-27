@@ -16,9 +16,6 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         super.init()
         statusItem.isVisible = false
 
-        popoverController.onPreferredContentSizeChanged = { [weak self] size in
-            self?.popover.contentSize = size
-        }
         popover.behavior = .transient
         popover.animates = true
         popover.delegate = self
@@ -139,6 +136,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             interval: refreshInterval,
             loginItemState: LoginItemRegistrar.currentState()
         )
+        popover.contentSize = popoverController.preferredContentSize
     }
 
     private func drawIndicator(percent: Int?) -> NSImage {

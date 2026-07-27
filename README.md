@@ -61,7 +61,7 @@ swift test
 ./Scripts/package_dmg.sh
 ```
 
-生成文件：`outputs/CodexQuota-1.3.0.dmg`。
+生成文件：`outputs/CodexQuota-1.3.1.dmg`。
 
 推送形如 `v1.3.0` 的版本标签后，GitHub Actions 会在 macOS 构建机上重新运行测试、生成 DMG，并自动上传到对应 Release。
 
@@ -103,7 +103,7 @@ codesign --verify --deep --strict /path/to/CodexQuota.app
 
 已完成：紧凑状态栏 UI、动态详情面板、周额度与重置卡读取、Codex 生命周期跟随、可选刷新频率、失败显式展示、登录项开关、测试、打包和文档。
 
-已发布：1.3.0 正式版已加入重置卡过期时间、动态面板高度和1秒/5秒/10秒刷新频率。
+已发布：1.3.1 正式版修复了额度重新读取时，详情弹窗顶部可能出现大块空白的问题。
 
 待办：公开分发前需要 Developer ID 签名、公证和独立版本兼容测试。
 
