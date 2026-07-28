@@ -12,7 +12,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private var outsideClickMonitor: Any?
 
     override init() {
-        statusItem = NSStatusBar.system.statusItem(withLength: 60)
+        statusItem = NSStatusBar.system.statusItem(withLength: 56)
         super.init()
         statusItem.isVisible = false
 
@@ -159,16 +159,15 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             }
 
             let text = percent.map { "\($0)%" } ?? "--%"
-            let textFont: NSFont = text.count >= 4
-                ? .systemFont(ofSize: 11, weight: .semibold, width: .condensed)
-                : .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+            let needsWideLayout = text.count >= 4
+            let textFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: textFont,
                 .foregroundColor: activeColor,
             ]
             let textSize = text.size(withAttributes: attributes)
             let textPoint = NSPoint(
-                x: 29,
+                x: needsWideLayout ? 24 : 29,
                 y: (rect.height - textSize.height) / 2
             )
             text.draw(at: textPoint, withAttributes: attributes)
