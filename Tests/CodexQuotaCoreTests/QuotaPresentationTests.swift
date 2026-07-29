@@ -3,6 +3,13 @@ import Testing
 
 @Suite("状态栏显示规则")
 struct QuotaPresentationTests {
+    @Test("只有100%使用加宽画布")
+    func indicatorWidths() {
+        #expect(QuotaPresentation.indicatorWidth(for: nil) == 56)
+        #expect(QuotaPresentation.indicatorWidth(for: 99) == 56)
+        #expect(QuotaPresentation.indicatorWidth(for: 100) == 62)
+    }
+
     @Test("颜色边界", arguments: [
         (19, QuotaColorBand.critical),
         (20, QuotaColorBand.warning),

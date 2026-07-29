@@ -39,6 +39,10 @@ public enum QuotaColorBand: Equatable, Sendable {
 }
 
 public enum QuotaPresentation {
+    public static func indicatorWidth(for remainingPercent: Int?) -> Int {
+        remainingPercent == 100 ? 62 : 56
+    }
+
     public static func colorBand(for remainingPercent: Int) -> QuotaColorBand {
         switch remainingPercent {
         case 61...100:

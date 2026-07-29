@@ -73,15 +73,15 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
         switch state {
         case .loading:
-            button.image = drawIndicator(percent: nil)
+            setIndicator(percent: nil, on: button)
             button.setAccessibilityLabel("Codex 周额度正在读取，点击查看详情")
         case let .available(quota):
-            button.image = drawIndicator(percent: quota.remainingPercent)
+            setIndicator(percent: quota.remainingPercent, on: button)
             button.setAccessibilityLabel(
                 "Codex 周额度剩余 \(quota.remainingPercent)%，点击查看详情"
             )
         case let .unavailable(message):
-            button.image = drawIndicator(percent: nil)
+            setIndicator(percent: nil, on: button)
             button.setAccessibilityLabel("Codex 周额度读取失败：\(message)，点击查看详情")
         }
 
@@ -139,8 +139,17 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         popover.contentSize = popoverController.preferredContentSize
     }
 
+    private func setIndicator(percent: Int?, on button: NSStatusBarButton) {
+        let width = CGFloat(QuotaPresentation.indicatorWidth(for: percent))
+        statusItem.length = width
+        button.image = drawIndicator(percent: percent)
+    }
+
     private func drawIndicator(percent: Int?) -> NSImage {
-        let size = NSSize(width: 56, height: 16)
+        let size = NSSize(
+            width: CGFloat(QuotaPresentation.indicatorWidth(for: percent)),
+            height: 16
+        )
         let image = NSImage(size: size, flipped: false) { rect in
             let activeColor = percent.map { self.color(for: $0) } ?? NSColor.tertiaryLabelColor
             let filledCount = percent.map(QuotaPresentation.filledSegmentCount) ?? 0
@@ -159,7 +168,6 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             }
 
             let text = percent.map { "\($0)%" } ?? "--%"
-            let needsWideLayout = text.count >= 4
             let textFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: textFont,
@@ -167,7 +175,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             ]
             let textSize = text.size(withAttributes: attributes)
             let textPoint = NSPoint(
-                x: needsWideLayout ? 24 : 29,
+                x: 29,
                 y: (rect.height - textSize.height) / 2
             )
             text.draw(at: textPoint, withAttributes: attributes)
