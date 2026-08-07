@@ -21,8 +21,8 @@ cp "$ROOT_DIR/Resources/AppIcon.icns" "$STAGING_APP/Contents/Resources/AppIcon.i
 
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.dengjiayi.codexquota.preview" "$STAGING_APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Codex 额度监控 预览版" "$STAGING_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.3.3" "$STAGING_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleVersion 9" "$STAGING_APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.4.0" "$STAGING_APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion 10" "$STAGING_APP/Contents/Info.plist"
 
 codesign --force --deep --sign - "$STAGING_APP"
 plutil -lint "$STAGING_APP/Contents/Info.plist"

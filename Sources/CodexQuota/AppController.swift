@@ -21,9 +21,6 @@ final class AppController: NSObject {
             onIntervalChanged: { [weak self] option in
                 self?.changeRefreshInterval(to: option)
             },
-            onLoginItemChanged: { enabled in
-                LoginItemRegistrar.setEnabled(enabled)
-            },
             onQuit: {
                 NSApp.terminate(nil)
             }

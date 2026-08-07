@@ -35,17 +35,12 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     func configureActions(
         onRefresh: @escaping () -> Void,
         onIntervalChanged: @escaping (RefreshIntervalOption) -> Void,
-        onLoginItemChanged: @escaping (Bool) -> Void,
         onQuit: @escaping () -> Void
     ) {
         popoverController.onRefresh = onRefresh
         popoverController.onIntervalChanged = { [weak self] option in
             self?.refreshInterval = option
             onIntervalChanged(option)
-        }
-        popoverController.onLoginItemChanged = { [weak self] enabled in
-            onLoginItemChanged(enabled)
-            self?.updatePopover()
         }
         popoverController.onQuit = onQuit
     }
@@ -133,8 +128,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private func updatePopover() {
         popoverController.update(
             state: currentState,
-            interval: refreshInterval,
-            loginItemState: LoginItemRegistrar.currentState()
+            interval: refreshInterval
         )
         popover.contentSize = popoverController.preferredContentSize
     }

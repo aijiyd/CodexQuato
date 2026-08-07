@@ -27,8 +27,8 @@ AppMain
 | `Sources/CodexQuota/CodexLifecycleMonitor.swift` | 监听 Codex 应用启动和退出，并过滤无关应用。 |
 | `Sources/CodexQuota/CodexBinaryLocator.swift` | 根据 Codex bundle id 动态定位内置程序。 |
 | `Sources/CodexQuota/StatusItemController.swift` | 绘制紧凑五段状态栏图，并控制详情面板及外部点击关闭。 |
-| `Sources/CodexQuota/QuotaPopoverViewController.swift` | 显示额度重置、重置卡过期时间和设置，并按卡片数量计算紧凑面板高度。 |
-| `Sources/CodexQuota/LoginItemRegistrar.swift` | 注册、取消和查询登录项，并处理系统批准。 |
+| `Sources/CodexQuota/QuotaPopoverViewController.swift` | 以菜单式布局显示周额度、进度、重置倒计时、重置时间、重置卡、刷新频率和操作，并按卡片数量计算面板高度。 |
+| `Sources/CodexQuota/LoginItemRegistrar.swift` | 首次启动时默认注册登录项，并处理系统批准。 |
 | `Resources/Info.plist` | 定义 bundle id、最低系统版本和 `LSUIElement`。 |
 | `Resources/AppIconSource.svg` / `AppIcon.icns` | 保存白底环形额度表图标设计稿与打包资源。 |
 | `Scripts/render_app_icon.swift` | 在透明画布上确定性绘制图标 PNG，避免转换工具填白四角。 |
@@ -51,3 +51,4 @@ AppMain
 - 时间信息放入点击面板，不依赖响应较慢的系统悬浮提示。
 - 重置卡只接受 `status=available` 且 `resetType=codexRateLimits` 的记录；声明数量与实际记录不一致时直接报错。
 - 面板高度由 Auto Layout 的实际内容高度计算，零张卡不保留卡片行，有几张卡就增加几行。
+- 登录启动不再提供应用内开关；正式应用每次启动都会检查并自动注册，用户仍可通过 macOS 系统设置管理。
