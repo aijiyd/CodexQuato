@@ -20,10 +20,7 @@ final class QuotaPopoverViewController: NSViewController {
         target: nil,
         action: nil
     )
-    private let intervalOptionsStack = NSStackView()
-    private var intervalOptionButtons: [IntervalChipButton] = []
     private var selectedInterval: RefreshIntervalOption = .oneMinute
-    private var intervalOptionsAreExpanded = false
     private var contentStack: NSStackView?
 
     private static let panelWidth: CGFloat = 252
@@ -51,8 +48,7 @@ final class QuotaPopoverViewController: NSViewController {
         ], spacing: 6)
 
         intervalButton.target = self
-        intervalButton.action = #selector(toggleIntervalOptions)
-        configureIntervalOptions()
+        intervalButton.action = #selector(showIntervalMenu)
 
         let refreshButton = MenuRowButton(
             title: "立即刷新",
@@ -82,7 +78,6 @@ final class QuotaPopoverViewController: NSViewController {
             resetCreditSection,
             resetCreditSeparator,
             intervalButton,
-            intervalOptionsStack,
             refreshSeparator,
             actionStack,
         ], spacing: 0)
@@ -95,7 +90,6 @@ final class QuotaPopoverViewController: NSViewController {
         contentStack.setCustomSpacing(10, after: resetCreditSection)
         contentStack.setCustomSpacing(5, after: resetCreditSeparator)
         contentStack.setCustomSpacing(5, after: intervalButton)
-        contentStack.setCustomSpacing(5, after: intervalOptionsStack)
         contentStack.setCustomSpacing(5, after: refreshSeparator)
 
         rootView.addSubview(contentStack)
@@ -110,7 +104,6 @@ final class QuotaPopoverViewController: NSViewController {
             resetCreditHeader.widthAnchor.constraint(equalTo: resetCreditSection.widthAnchor),
             resetCreditRowsStack.widthAnchor.constraint(equalTo: resetCreditSection.widthAnchor),
             intervalButton.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
-            intervalOptionsStack.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
             actionStack.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
             fiveHourSeparator.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
             weeklySeparator.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
@@ -124,18 +117,13 @@ final class QuotaPopoverViewController: NSViewController {
         updatePreferredContentSize()
     }
 
-    override func viewWillDisappear() {
-        super.viewWillDisappear()
-        setIntervalOptionsExpanded(false)
-    }
-
     func update(
         state: QuotaState,
         interval: RefreshIntervalOption
     ) {
         _ = view
         selectedInterval = interval
-        updateIntervalPresentation()
+        intervalButton.trailingText = "\(interval.title)  ›"
 
         switch state {
         case .loading:
@@ -162,11 +150,6 @@ final class QuotaPopoverViewController: NSViewController {
             updateResetCredits(nil, placeholder: "读取失败")
         }
         updatePreferredContentSize()
-    }
-
-    func collapseIntervalOptions() {
-        guard isViewLoaded else { return }
-        setIntervalOptionsExpanded(false)
     }
 
     private func update(section: QuotaSectionView, with quota: QuotaWindow) {
@@ -221,56 +204,38 @@ final class QuotaPopoverViewController: NSViewController {
         onPreferredContentSizeChanged?(size)
     }
 
-    private func configureIntervalOptions() {
-        intervalOptionsStack.orientation = .vertical
-        intervalOptionsStack.alignment = .leading
-        intervalOptionsStack.spacing = 5
-        intervalOptionsStack.isHidden = true
+    @objc private func showIntervalMenu() {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        var selectedItem: NSMenuItem?
 
-        for options in RefreshIntervalPresentation.rows {
-            let buttons = options.map { option in
-                let button = IntervalChipButton(option: option)
-                button.target = self
-                button.action = #selector(intervalChipSelected(_:))
-                intervalOptionButtons.append(button)
-                return button
+        for option in RefreshIntervalOption.allCases {
+            let item = NSMenuItem(
+                title: option.title,
+                action: #selector(intervalMenuItemSelected(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.tag = option.rawValue
+            item.state = option == selectedInterval ? .on : .off
+            menu.addItem(item)
+            if option == selectedInterval {
+                selectedItem = item
             }
-            let row = NSStackView(views: buttons)
-            row.orientation = .horizontal
-            row.alignment = .centerY
-            row.distribution = .fillEqually
-            row.spacing = 4
-            intervalOptionsStack.addArrangedSubview(row)
-            row.widthAnchor.constraint(equalTo: intervalOptionsStack.widthAnchor).isActive = true
         }
+
+        menu.popUp(
+            positioning: selectedItem,
+            at: NSPoint(x: intervalButton.bounds.maxX - 90, y: intervalButton.bounds.minY),
+            in: intervalButton
+        )
     }
 
-    @objc private func toggleIntervalOptions() {
-        setIntervalOptionsExpanded(!intervalOptionsAreExpanded)
-    }
-
-    @objc private func intervalChipSelected(_ sender: IntervalChipButton) {
-        let option = sender.option
+    @objc private func intervalMenuItemSelected(_ sender: NSMenuItem) {
+        guard let option = RefreshIntervalOption(rawValue: sender.tag) else { return }
         selectedInterval = option
-        updateIntervalPresentation()
+        intervalButton.trailingText = "\(option.title)  ›"
         onIntervalChanged?(option)
-        setIntervalOptionsExpanded(false)
-    }
-
-    private func setIntervalOptionsExpanded(_ expanded: Bool) {
-        guard intervalOptionsAreExpanded != expanded else { return }
-        intervalOptionsAreExpanded = expanded
-        intervalOptionsStack.isHidden = !expanded
-        updateIntervalPresentation()
-        updatePreferredContentSize()
-    }
-
-    private func updateIntervalPresentation() {
-        let arrow = intervalOptionsAreExpanded ? "⌃" : "⌄"
-        intervalButton.trailingText = "\(selectedInterval.title)  \(arrow)"
-        for button in intervalOptionButtons {
-            button.isSelected = button.option == selectedInterval
-        }
     }
 
     @objc private func refreshClicked() {
@@ -474,85 +439,6 @@ private final class QuotaProgressView: NSView {
         case .critical:
             return .systemRed
         }
-    }
-}
-
-private final class IntervalChipButton: NSButton {
-    let option: RefreshIntervalOption
-    var isSelected = false {
-        didSet {
-            setAccessibilityValue(isSelected ? "已选择" : "未选择")
-            needsDisplay = true
-        }
-    }
-    private var isHovered = false
-    private var trackingAreaReference: NSTrackingArea?
-
-    init(option: RefreshIntervalOption) {
-        self.option = option
-        super.init(frame: .zero)
-        title = option.compactTitle
-        isBordered = false
-        focusRingType = .none
-        translatesAutoresizingMaskIntoConstraints = false
-        heightAnchor.constraint(equalToConstant: 24).isActive = true
-        setAccessibilityLabel(option.title)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("不支持从归档创建刷新频率按钮")
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingAreaReference {
-            removeTrackingArea(trackingAreaReference)
-        }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        trackingAreaReference = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHovered = true
-        needsDisplay = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHovered = false
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let backgroundColor: NSColor
-        if isSelected {
-            backgroundColor = .controlAccentColor
-        } else if isHovered || isHighlighted {
-            backgroundColor = .unemphasizedSelectedContentBackgroundColor
-        } else {
-            backgroundColor = .quaternaryLabelColor
-        }
-        backgroundColor.setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 7, yRadius: 7).fill()
-
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 11, weight: isSelected ? .semibold : .regular),
-            .foregroundColor: isSelected ? NSColor.alternateSelectedControlTextColor : NSColor.labelColor,
-        ]
-        let textSize = title.size(withAttributes: attributes)
-        title.draw(
-            at: NSPoint(
-                x: (bounds.width - textSize.width) / 2,
-                y: (bounds.height - textSize.height) / 2
-            ),
-            withAttributes: attributes
-        )
     }
 }
 

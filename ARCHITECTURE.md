@@ -26,8 +26,8 @@ AppMain
 | `Sources/CodexQuota/AppSettings.swift` | 使用 UserDefaults 保存刷新频率。 |
 | `Sources/CodexQuota/CodexLifecycleMonitor.swift` | 监听 Codex 应用启动和退出，并过滤无关应用。 |
 | `Sources/CodexQuota/CodexBinaryLocator.swift` | 根据 Codex bundle id 动态定位内置程序。 |
-| `Sources/CodexQuota/StatusItemController.swift` | 绘制紧凑五段状态栏图，并控制详情面板及外部点击关闭。 |
-| `Sources/CodexQuota/QuotaPopoverViewController.swift` | 显示双额度、重置卡、内嵌刷新胶囊和操作，并按可见内容计算面板高度。 |
+| `Sources/CodexQuota/StatusItemController.swift` | 5小时额度可用时绘制上下双行状态栏图，否则绘制单行周额度，并控制详情面板关闭。 |
+| `Sources/CodexQuota/QuotaPopoverViewController.swift` | 显示双额度、重置卡、原生刷新频率菜单和操作，并按可见内容计算面板高度。 |
 | `Sources/CodexQuota/LoginItemRegistrar.swift` | 首次启动时默认注册登录项，并处理系统批准。 |
 | `Resources/Info.plist` | 定义 bundle id、最低系统版本和 `LSUIElement`。 |
 | `Resources/AppIconSource.svg` / `AppIcon.icns` | 保存白底环形额度表图标设计稿与打包资源。 |
@@ -47,7 +47,8 @@ AppMain
 - 子进程长连接只在 Codex 运行期间存在，8秒超时后立即终止。
 - 失败状态不保留旧百分比，避免把过期额度误认为当前额度。
 - 后台应用一直运行以感知 Codex 再次启动；状态栏入口按 Codex 生命周期显隐。
-- 刷新频率只允许九个明确值，使用两排内嵌胶囊选择，修改后立即保存、收起选择器并重建定时器。
+- 刷新频率只允许九个明确值，使用整行入口打开原生菜单，修改后立即保存并重建定时器。
+- 状态栏不增加5小时或周额度文字标签；有5小时额度时固定上行显示5小时、下行显示周额度，缺失时回退原单行周额度。
 - 时间信息放入点击面板，不依赖响应较慢的系统悬浮提示。
 - 重置卡只接受 `status=available` 且 `resetType=codexRateLimits` 的记录；声明数量与实际记录不一致时直接报错。
 - 面板高度由 Auto Layout 的实际内容高度计算，零张卡不保留卡片行，有几张卡就增加几行。

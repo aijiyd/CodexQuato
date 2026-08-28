@@ -56,6 +56,16 @@ public enum QuotaPresentation {
         remainingPercent == 100 ? 62 : 56
     }
 
+    public static func dualIndicatorWidth(
+        fiveHourPercent: Int?,
+        weeklyPercent: Int?
+    ) -> Int {
+        max(
+            indicatorWidth(for: fiveHourPercent),
+            indicatorWidth(for: weeklyPercent)
+        )
+    }
+
     public static func colorBand(for remainingPercent: Int) -> QuotaColorBand {
         switch remainingPercent {
         case 61...100:
@@ -107,16 +117,6 @@ public enum RefreshIntervalOption: Int, CaseIterable, Equatable, Sendable {
         }
     }
 
-    public var compactTitle: String {
-        title.replacingOccurrences(of: " ", with: "")
-    }
-}
-
-public enum RefreshIntervalPresentation {
-    public static let rows: [[RefreshIntervalOption]] = [
-        [.oneSecond, .fiveSeconds, .tenSeconds, .fifteenSeconds, .thirtySeconds],
-        [.oneMinute, .twoMinutes, .fiveMinutes, .fifteenMinutes],
-    ]
 }
 
 public enum CodexLifecycleRule {
