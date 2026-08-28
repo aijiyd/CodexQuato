@@ -7,11 +7,11 @@ final class QuotaPopoverViewController: NSViewController {
     var onRefresh: (() -> Void)?
     var onIntervalChanged: ((RefreshIntervalOption) -> Void)?
     var onQuit: (() -> Void)?
+    var onPreferredContentSizeChanged: ((NSSize) -> Void)?
 
-    private let remainingLabel = NSTextField(labelWithString: "正在读取")
-    private let progressView = QuotaProgressView()
-    private let countdownLabel = NSTextField(labelWithString: "正在读取额度")
-    private let resetDateLabel = NSTextField(wrappingLabelWithString: "重置时间：--")
+    private let fiveHourSection = QuotaSectionView(title: "5小时额度")
+    private let weeklySection = QuotaSectionView(title: "1周额度")
+    private let fiveHourSeparator = NSBox()
     private let resetCreditCountLabel = NSTextField(labelWithString: "正在读取")
     private let resetCreditRowsStack = NSStackView()
     private let intervalButton = MenuRowButton(
@@ -20,7 +20,10 @@ final class QuotaPopoverViewController: NSViewController {
         target: nil,
         action: nil
     )
+    private let intervalOptionsStack = NSStackView()
+    private var intervalOptionButtons: [IntervalChipButton] = []
     private var selectedInterval: RefreshIntervalOption = .oneMinute
+    private var intervalOptionsAreExpanded = false
     private var contentStack: NSStackView?
 
     private static let panelWidth: CGFloat = 252
@@ -29,27 +32,6 @@ final class QuotaPopoverViewController: NSViewController {
 
     override func loadView() {
         let rootView = NSView(frame: NSRect(x: 0, y: 0, width: Self.panelWidth, height: 220))
-
-        let quotaTitleLabel = titleLabel("1周额度")
-        configureValueLabel(remainingLabel)
-        let quotaHeader = horizontalRow(left: quotaTitleLabel, right: remainingLabel)
-
-        progressView.translatesAutoresizingMaskIntoConstraints = false
-        progressView.heightAnchor.constraint(equalToConstant: 6).isActive = true
-
-        countdownLabel.font = .systemFont(ofSize: 12, weight: .medium)
-        countdownLabel.textColor = .labelColor
-
-        resetDateLabel.font = .systemFont(ofSize: 11)
-        resetDateLabel.textColor = .secondaryLabelColor
-        resetDateLabel.maximumNumberOfLines = 2
-
-        let quotaSection = verticalStack([
-            quotaHeader,
-            progressView,
-            countdownLabel,
-            resetDateLabel,
-        ], spacing: 7)
 
         let resetCreditTitleLabel = titleLabel("重置卡")
         configureValueLabel(resetCreditCountLabel)
@@ -69,7 +51,8 @@ final class QuotaPopoverViewController: NSViewController {
         ], spacing: 6)
 
         intervalButton.target = self
-        intervalButton.action = #selector(showIntervalMenu)
+        intervalButton.action = #selector(toggleIntervalOptions)
+        configureIntervalOptions()
 
         let refreshButton = MenuRowButton(
             title: "立即刷新",
@@ -87,25 +70,32 @@ final class QuotaPopoverViewController: NSViewController {
         )
         let actionStack = verticalStack([refreshButton, quitButton], spacing: 0)
 
-        let quotaSeparator = separator()
+        fiveHourSeparator.boxType = .separator
+        let weeklySeparator = separator()
         let resetCreditSeparator = separator()
         let refreshSeparator = separator()
         let contentStack = verticalStack([
-            quotaSection,
-            quotaSeparator,
+            fiveHourSection,
+            fiveHourSeparator,
+            weeklySection,
+            weeklySeparator,
             resetCreditSection,
             resetCreditSeparator,
             intervalButton,
+            intervalOptionsStack,
             refreshSeparator,
             actionStack,
         ], spacing: 0)
         contentStack.translatesAutoresizingMaskIntoConstraints = false
 
-        contentStack.setCustomSpacing(10, after: quotaSection)
-        contentStack.setCustomSpacing(10, after: quotaSeparator)
+        contentStack.setCustomSpacing(10, after: fiveHourSection)
+        contentStack.setCustomSpacing(10, after: fiveHourSeparator)
+        contentStack.setCustomSpacing(10, after: weeklySection)
+        contentStack.setCustomSpacing(10, after: weeklySeparator)
         contentStack.setCustomSpacing(10, after: resetCreditSection)
         contentStack.setCustomSpacing(5, after: resetCreditSeparator)
         contentStack.setCustomSpacing(5, after: intervalButton)
+        contentStack.setCustomSpacing(5, after: intervalOptionsStack)
         contentStack.setCustomSpacing(5, after: refreshSeparator)
 
         rootView.addSubview(contentStack)
@@ -114,17 +104,16 @@ final class QuotaPopoverViewController: NSViewController {
             contentStack.leadingAnchor.constraint(equalTo: rootView.leadingAnchor, constant: Self.horizontalInset),
             contentStack.trailingAnchor.constraint(equalTo: rootView.trailingAnchor, constant: -Self.horizontalInset),
             contentStack.topAnchor.constraint(equalTo: rootView.topAnchor, constant: Self.verticalInset),
-            quotaSection.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
-            quotaHeader.widthAnchor.constraint(equalTo: quotaSection.widthAnchor),
-            progressView.widthAnchor.constraint(equalTo: quotaSection.widthAnchor),
-            countdownLabel.widthAnchor.constraint(equalTo: quotaSection.widthAnchor),
-            resetDateLabel.widthAnchor.constraint(equalTo: quotaSection.widthAnchor),
+            fiveHourSection.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
+            weeklySection.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
             resetCreditSection.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
             resetCreditHeader.widthAnchor.constraint(equalTo: resetCreditSection.widthAnchor),
             resetCreditRowsStack.widthAnchor.constraint(equalTo: resetCreditSection.widthAnchor),
             intervalButton.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
+            intervalOptionsStack.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
             actionStack.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
-            quotaSeparator.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
+            fiveHourSeparator.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
+            weeklySeparator.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
             resetCreditSeparator.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
             refreshSeparator.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
             refreshButton.widthAnchor.constraint(equalTo: actionStack.widthAnchor),
@@ -135,39 +124,62 @@ final class QuotaPopoverViewController: NSViewController {
         updatePreferredContentSize()
     }
 
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        setIntervalOptionsExpanded(false)
+    }
+
     func update(
         state: QuotaState,
         interval: RefreshIntervalOption
     ) {
         _ = view
         selectedInterval = interval
-        intervalButton.trailingText = "\(interval.title)  ›"
+        updateIntervalPresentation()
 
         switch state {
         case .loading:
-            remainingLabel.stringValue = "正在读取"
-            progressView.percent = nil
-            countdownLabel.stringValue = "正在读取额度"
-            resetDateLabel.stringValue = "重置时间：--"
+            setFiveHourSectionVisible(true)
+            fiveHourSection.setLoading()
+            weeklySection.setLoading()
             updateResetCredits(nil, placeholder: "正在读取")
-        case let .available(quota):
-            remainingLabel.stringValue = "剩余 \(quota.remainingPercent)%"
-            progressView.percent = quota.remainingPercent
-            countdownLabel.stringValue = Self.countdownText(to: quota.resetsAt)
-            resetDateLabel.stringValue = "重置时间：\(Self.fullDateFormatter.string(from: quota.resetsAt))"
-            if let credits = quota.resetCredits {
+        case let .available(snapshot):
+            if let fiveHour = snapshot.fiveHour {
+                setFiveHourSectionVisible(true)
+                update(section: fiveHourSection, with: fiveHour)
+            } else {
+                setFiveHourSectionVisible(false)
+            }
+            update(section: weeklySection, with: snapshot.weekly)
+            if let credits = snapshot.resetCredits {
                 updateResetCredits(credits, placeholder: nil)
             } else {
                 updateResetCredits(nil, placeholder: "暂不可用")
             }
         case let .unavailable(message):
-            remainingLabel.stringValue = "--%"
-            progressView.percent = nil
-            countdownLabel.stringValue = "额度读取失败"
-            resetDateLabel.stringValue = message
+            setFiveHourSectionVisible(false)
+            weeklySection.setUnavailable(message: message)
             updateResetCredits(nil, placeholder: "读取失败")
         }
         updatePreferredContentSize()
+    }
+
+    func collapseIntervalOptions() {
+        guard isViewLoaded else { return }
+        setIntervalOptionsExpanded(false)
+    }
+
+    private func update(section: QuotaSectionView, with quota: QuotaWindow) {
+        section.setAvailable(
+            remainingPercent: quota.remainingPercent,
+            countdown: Self.countdownText(to: quota.resetsAt),
+            resetDate: Self.fullDateFormatter.string(from: quota.resetsAt)
+        )
+    }
+
+    private func setFiveHourSectionVisible(_ visible: Bool) {
+        fiveHourSection.isHidden = !visible
+        fiveHourSeparator.isHidden = !visible
     }
 
     private func updateResetCredits(
@@ -206,40 +218,59 @@ final class QuotaPopoverViewController: NSViewController {
         let size = NSSize(width: Self.panelWidth, height: height)
         guard size != preferredContentSize else { return }
         preferredContentSize = size
+        onPreferredContentSizeChanged?(size)
     }
 
-    @objc private func showIntervalMenu() {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        var selectedItem: NSMenuItem?
+    private func configureIntervalOptions() {
+        intervalOptionsStack.orientation = .vertical
+        intervalOptionsStack.alignment = .leading
+        intervalOptionsStack.spacing = 5
+        intervalOptionsStack.isHidden = true
 
-        for option in RefreshIntervalOption.allCases {
-            let item = NSMenuItem(
-                title: option.title,
-                action: #selector(intervalMenuItemSelected(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.tag = option.rawValue
-            item.state = option == selectedInterval ? .on : .off
-            menu.addItem(item)
-            if option == selectedInterval {
-                selectedItem = item
+        for options in RefreshIntervalPresentation.rows {
+            let buttons = options.map { option in
+                let button = IntervalChipButton(option: option)
+                button.target = self
+                button.action = #selector(intervalChipSelected(_:))
+                intervalOptionButtons.append(button)
+                return button
             }
+            let row = NSStackView(views: buttons)
+            row.orientation = .horizontal
+            row.alignment = .centerY
+            row.distribution = .fillEqually
+            row.spacing = 4
+            intervalOptionsStack.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: intervalOptionsStack.widthAnchor).isActive = true
         }
-
-        menu.popUp(
-            positioning: selectedItem,
-            at: NSPoint(x: intervalButton.bounds.maxX - 90, y: intervalButton.bounds.minY),
-            in: intervalButton
-        )
     }
 
-    @objc private func intervalMenuItemSelected(_ sender: NSMenuItem) {
-        guard let option = RefreshIntervalOption(rawValue: sender.tag) else { return }
+    @objc private func toggleIntervalOptions() {
+        setIntervalOptionsExpanded(!intervalOptionsAreExpanded)
+    }
+
+    @objc private func intervalChipSelected(_ sender: IntervalChipButton) {
+        let option = sender.option
         selectedInterval = option
-        intervalButton.trailingText = "\(option.title)  ›"
+        updateIntervalPresentation()
         onIntervalChanged?(option)
+        setIntervalOptionsExpanded(false)
+    }
+
+    private func setIntervalOptionsExpanded(_ expanded: Bool) {
+        guard intervalOptionsAreExpanded != expanded else { return }
+        intervalOptionsAreExpanded = expanded
+        intervalOptionsStack.isHidden = !expanded
+        updateIntervalPresentation()
+        updatePreferredContentSize()
+    }
+
+    private func updateIntervalPresentation() {
+        let arrow = intervalOptionsAreExpanded ? "⌃" : "⌄"
+        intervalButton.trailingText = "\(selectedInterval.title)  \(arrow)"
+        for button in intervalOptionButtons {
+            button.isSelected = button.option == selectedInterval
+        }
     }
 
     @objc private func refreshClicked() {
@@ -317,6 +348,88 @@ final class QuotaPopoverViewController: NSViewController {
     }()
 }
 
+private final class QuotaSectionView: NSStackView {
+    private let remainingLabel = NSTextField(labelWithString: "正在读取")
+    private let progressView = QuotaProgressView()
+    private let countdownLabel = NSTextField(labelWithString: "正在读取额度")
+    private let resetDateLabel = NSTextField(wrappingLabelWithString: "重置时间：--")
+
+    init(title: String) {
+        super.init(frame: .zero)
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.textColor = .labelColor
+
+        remainingLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        remainingLabel.textColor = .labelColor
+        remainingLabel.alignment = .right
+        remainingLabel.setContentHuggingPriority(.required, for: .horizontal)
+
+        let header = NSStackView(views: [titleLabel, remainingLabel])
+        header.orientation = .horizontal
+        header.alignment = .centerY
+        header.distribution = .fill
+        header.spacing = 10
+        titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        progressView.translatesAutoresizingMaskIntoConstraints = false
+        progressView.heightAnchor.constraint(equalToConstant: 6).isActive = true
+
+        countdownLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        countdownLabel.textColor = .labelColor
+
+        resetDateLabel.font = .systemFont(ofSize: 11)
+        resetDateLabel.textColor = .secondaryLabelColor
+        resetDateLabel.maximumNumberOfLines = 2
+
+        orientation = .vertical
+        alignment = .leading
+        spacing = 7
+        addArrangedSubview(header)
+        addArrangedSubview(progressView)
+        addArrangedSubview(countdownLabel)
+        addArrangedSubview(resetDateLabel)
+
+        NSLayoutConstraint.activate([
+            header.widthAnchor.constraint(equalTo: widthAnchor),
+            progressView.widthAnchor.constraint(equalTo: widthAnchor),
+            countdownLabel.widthAnchor.constraint(equalTo: widthAnchor),
+            resetDateLabel.widthAnchor.constraint(equalTo: widthAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init(coder: NSCoder) {
+        fatalError("不支持从归档创建额度区域")
+    }
+
+    func setLoading() {
+        remainingLabel.stringValue = "正在读取"
+        progressView.percent = nil
+        countdownLabel.stringValue = "正在读取额度"
+        resetDateLabel.stringValue = "重置时间：--"
+    }
+
+    func setAvailable(
+        remainingPercent: Int,
+        countdown: String,
+        resetDate: String
+    ) {
+        remainingLabel.stringValue = "剩余 \(remainingPercent)%"
+        progressView.percent = remainingPercent
+        countdownLabel.stringValue = countdown
+        resetDateLabel.stringValue = "重置时间：\(resetDate)"
+    }
+
+    func setUnavailable(message: String) {
+        remainingLabel.stringValue = "--%"
+        progressView.percent = nil
+        countdownLabel.stringValue = "额度读取失败"
+        resetDateLabel.stringValue = message
+    }
+}
+
 private final class QuotaProgressView: NSView {
     var percent: Int? {
         didSet {
@@ -361,6 +474,85 @@ private final class QuotaProgressView: NSView {
         case .critical:
             return .systemRed
         }
+    }
+}
+
+private final class IntervalChipButton: NSButton {
+    let option: RefreshIntervalOption
+    var isSelected = false {
+        didSet {
+            setAccessibilityValue(isSelected ? "已选择" : "未选择")
+            needsDisplay = true
+        }
+    }
+    private var isHovered = false
+    private var trackingAreaReference: NSTrackingArea?
+
+    init(option: RefreshIntervalOption) {
+        self.option = option
+        super.init(frame: .zero)
+        title = option.compactTitle
+        isBordered = false
+        focusRingType = .none
+        translatesAutoresizingMaskIntoConstraints = false
+        heightAnchor.constraint(equalToConstant: 24).isActive = true
+        setAccessibilityLabel(option.title)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("不支持从归档创建刷新频率按钮")
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingAreaReference {
+            removeTrackingArea(trackingAreaReference)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingAreaReference = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let backgroundColor: NSColor
+        if isSelected {
+            backgroundColor = .controlAccentColor
+        } else if isHovered || isHighlighted {
+            backgroundColor = .unemphasizedSelectedContentBackgroundColor
+        } else {
+            backgroundColor = .quaternaryLabelColor
+        }
+        backgroundColor.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 7, yRadius: 7).fill()
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11, weight: isSelected ? .semibold : .regular),
+            .foregroundColor: isSelected ? NSColor.alternateSelectedControlTextColor : NSColor.labelColor,
+        ]
+        let textSize = title.size(withAttributes: attributes)
+        title.draw(
+            at: NSPoint(
+                x: (bounds.width - textSize.width) / 2,
+                y: (bounds.height - textSize.height) / 2
+            ),
+            withAttributes: attributes
+        )
     }
 }
 

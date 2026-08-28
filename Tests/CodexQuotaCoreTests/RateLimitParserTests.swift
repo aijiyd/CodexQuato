@@ -2,35 +2,50 @@ import Foundation
 import Testing
 @testable import CodexQuotaCore
 
-@Suite("周额度解析")
+@Suite("额度快照解析")
 struct RateLimitParserTests {
-    @Test("从 codex 多额度响应解析周额度")
-    func parsesWeeklyQuotaFromMultiBucketResponse() throws {
-        let quota = try RateLimitParser.parseWeeklyQuota(from: response(
+    @Test("从 codex 多额度响应解析5小时和周额度")
+    func parsesQuotaSnapshotFromMultiBucketResponse() throws {
+        let snapshot = try RateLimitParser.parseQuotaSnapshot(from: response(
             primary: window(used: 15, minutes: 300, reset: 1_800_000_000),
             secondary: window(used: 58, minutes: 10_080, reset: 1_900_000_000),
             useMultiBucket: true
         ))
 
-        #expect(quota.remainingPercent == 42)
-        #expect(quota.resetsAt == Date(timeIntervalSince1970: 1_900_000_000))
+        #expect(snapshot.fiveHour?.remainingPercent == 85)
+        #expect(snapshot.fiveHour?.resetsAt == Date(timeIntervalSince1970: 1_800_000_000))
+        #expect(snapshot.weekly.remainingPercent == 42)
+        #expect(snapshot.weekly.resetsAt == Date(timeIntervalSince1970: 1_900_000_000))
     }
 
-    @Test("兼容旧版单额度响应")
+    @Test("额度顺序变化不影响识别")
+    func parsesReversedQuotaWindows() throws {
+        let snapshot = try RateLimitParser.parseQuotaSnapshot(from: response(
+            primary: window(used: 58, minutes: 10_080, reset: 1_900_000_000),
+            secondary: window(used: 15, minutes: 300, reset: 1_800_000_000),
+            useMultiBucket: true
+        ))
+
+        #expect(snapshot.fiveHour?.remainingPercent == 85)
+        #expect(snapshot.weekly.remainingPercent == 42)
+    }
+
+    @Test("5小时额度缺失时继续解析周额度")
     func parsesBackwardCompatibleSnapshot() throws {
-        let quota = try RateLimitParser.parseWeeklyQuota(from: response(
+        let snapshot = try RateLimitParser.parseQuotaSnapshot(from: response(
             primary: window(used: 4, minutes: 10_080, reset: 1_900_000_000),
             secondary: nil,
             useMultiBucket: false
         ))
 
-        #expect(quota.remainingPercent == 96)
-        #expect(quota.resetCredits == nil)
+        #expect(snapshot.fiveHour == nil)
+        #expect(snapshot.weekly.remainingPercent == 96)
+        #expect(snapshot.resetCredits == nil)
     }
 
     @Test("解析并按过期时间排列可用重置卡")
     func parsesResetCredits() throws {
-        let quota = try RateLimitParser.parseWeeklyQuota(from: response(
+        let snapshot = try RateLimitParser.parseQuotaSnapshot(from: response(
             primary: window(used: 4, minutes: 10_080, reset: 1_900_000_000),
             secondary: nil,
             useMultiBucket: true,
@@ -44,8 +59,8 @@ struct RateLimitParserTests {
             ]
         ))
 
-        #expect(quota.resetCredits?.map(\.id) == ["earlier", "later"])
-        #expect(quota.resetCredits?.map(\.expiresAt) == [
+        #expect(snapshot.resetCredits?.map(\.id) == ["earlier", "later"])
+        #expect(snapshot.resetCredits?.map(\.expiresAt) == [
             Date(timeIntervalSince1970: 1_940_000_000),
             Date(timeIntervalSince1970: 1_950_000_000),
         ])
@@ -53,20 +68,20 @@ struct RateLimitParserTests {
 
     @Test("支持没有可用重置卡")
     func parsesNoResetCredits() throws {
-        let quota = try RateLimitParser.parseWeeklyQuota(from: response(
+        let snapshot = try RateLimitParser.parseQuotaSnapshot(from: response(
             primary: window(used: 4, minutes: 10_080, reset: 1_900_000_000),
             secondary: nil,
             useMultiBucket: true,
             resetCredits: ["availableCount": 0, "credits": []]
         ))
 
-        #expect(quota.resetCredits == [])
+        #expect(snapshot.resetCredits == [])
     }
 
     @Test("重置卡数量不一致时失败")
     func rejectsResetCreditCountMismatch() {
         #expect(throws: RateLimitParsingError.resetCreditCountMismatch(expected: 2, actual: 1)) {
-            try RateLimitParser.parseWeeklyQuota(from: response(
+            try RateLimitParser.parseQuotaSnapshot(from: response(
                 primary: window(used: 4, minutes: 10_080, reset: 1_900_000_000),
                 secondary: nil,
                 useMultiBucket: true,
@@ -80,8 +95,8 @@ struct RateLimitParserTests {
 
     @Test("缺失周额度时失败")
     func rejectsMissingWeeklyWindow() {
-        #expect(throws: RateLimitParsingError.weeklyWindowMissing) {
-            try RateLimitParser.parseWeeklyQuota(from: response(
+        #expect(throws: RateLimitParsingError.windowMissing(.weekly)) {
+            try RateLimitParser.parseQuotaSnapshot(from: response(
                 primary: window(used: 10, minutes: 300, reset: 1_900_000_000),
                 secondary: nil,
                 useMultiBucket: true
@@ -91,8 +106,8 @@ struct RateLimitParserTests {
 
     @Test("重复周额度时失败")
     func rejectsDuplicatedWeeklyWindow() {
-        #expect(throws: RateLimitParsingError.weeklyWindowDuplicated) {
-            try RateLimitParser.parseWeeklyQuota(from: response(
+        #expect(throws: RateLimitParsingError.windowDuplicated(.weekly)) {
+            try RateLimitParser.parseQuotaSnapshot(from: response(
                 primary: window(used: 10, minutes: 10_080, reset: 1_900_000_000),
                 secondary: window(used: 20, minutes: 10_080, reset: 1_900_000_001),
                 useMultiBucket: true
@@ -100,10 +115,10 @@ struct RateLimitParserTests {
         }
     }
 
-    @Test("非法百分比时失败", arguments: [-1, 101])
-    func rejectsInvalidPercent(_ usedPercent: Int) {
-        #expect(throws: RateLimitParsingError.invalidUsedPercent(usedPercent)) {
-            try RateLimitParser.parseWeeklyQuota(from: response(
+    @Test("周额度百分比非法时失败", arguments: [-1, 101])
+    func rejectsInvalidWeeklyPercent(_ usedPercent: Int) {
+        #expect(throws: RateLimitParsingError.invalidUsedPercent(.weekly, usedPercent)) {
+            try RateLimitParser.parseQuotaSnapshot(from: response(
                 primary: window(used: usedPercent, minutes: 10_080, reset: 1_900_000_000),
                 secondary: nil,
                 useMultiBucket: true
@@ -111,12 +126,45 @@ struct RateLimitParserTests {
         }
     }
 
-    @Test("缺失重置时间时失败")
-    func rejectsMissingResetTime() {
-        #expect(throws: RateLimitParsingError.resetTimeMissing) {
-            try RateLimitParser.parseWeeklyQuota(from: response(
+    @Test("周额度缺失重置时间时失败")
+    func rejectsMissingWeeklyResetTime() {
+        #expect(throws: RateLimitParsingError.resetTimeMissing(.weekly)) {
+            try RateLimitParser.parseQuotaSnapshot(from: response(
                 primary: window(used: 10, minutes: 10_080, reset: nil),
                 secondary: nil,
+                useMultiBucket: true
+            ))
+        }
+    }
+
+    @Test("重复5小时额度时失败")
+    func rejectsDuplicatedFiveHourWindow() {
+        #expect(throws: RateLimitParsingError.windowDuplicated(.fiveHour)) {
+            try RateLimitParser.parseQuotaSnapshot(from: response(
+                primary: window(used: 10, minutes: 300, reset: 1_900_000_000),
+                secondary: window(used: 20, minutes: 300, reset: 1_900_000_001),
+                useMultiBucket: true
+            ))
+        }
+    }
+
+    @Test("5小时额度百分比非法时失败", arguments: [-1, 101])
+    func rejectsInvalidFiveHourPercent(_ usedPercent: Int) {
+        #expect(throws: RateLimitParsingError.invalidUsedPercent(.fiveHour, usedPercent)) {
+            try RateLimitParser.parseQuotaSnapshot(from: response(
+                primary: window(used: usedPercent, minutes: 300, reset: 1_800_000_000),
+                secondary: window(used: 10, minutes: 10_080, reset: 1_900_000_000),
+                useMultiBucket: true
+            ))
+        }
+    }
+
+    @Test("5小时额度缺失重置时间时失败")
+    func rejectsMissingFiveHourResetTime() {
+        #expect(throws: RateLimitParsingError.resetTimeMissing(.fiveHour)) {
+            try RateLimitParser.parseQuotaSnapshot(from: response(
+                primary: window(used: 10, minutes: 300, reset: nil),
+                secondary: window(used: 10, minutes: 10_080, reset: 1_900_000_000),
                 useMultiBucket: true
             ))
         }
@@ -126,7 +174,7 @@ struct RateLimitParserTests {
     func exposesServerError() {
         let data = Data(#"{"id":2,"error":{"message":"not logged in"}}"#.utf8)
         #expect(throws: RateLimitParsingError.serverError("not logged in")) {
-            try RateLimitParser.parseWeeklyQuota(from: data)
+            try RateLimitParser.parseQuotaSnapshot(from: data)
         }
     }
 

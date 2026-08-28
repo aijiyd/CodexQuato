@@ -20,6 +20,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         popover.animates = true
         popover.delegate = self
         popover.contentViewController = popoverController
+        popoverController.onPreferredContentSizeChanged = { [weak self] size in
+            self?.popover.contentSize = size
+        }
         _ = popoverController.view
         popover.contentSize = popoverController.preferredContentSize
 
@@ -70,10 +73,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         case .loading:
             setIndicator(percent: nil, on: button)
             button.setAccessibilityLabel("Codex 周额度正在读取，点击查看详情")
-        case let .available(quota):
-            setIndicator(percent: quota.remainingPercent, on: button)
+        case let .available(snapshot):
+            setIndicator(percent: snapshot.weekly.remainingPercent, on: button)
             button.setAccessibilityLabel(
-                "Codex 周额度剩余 \(quota.remainingPercent)%，点击查看详情"
+                "Codex 周额度剩余 \(snapshot.weekly.remainingPercent)%，点击查看详情"
             )
         case let .unavailable(message):
             setIndicator(percent: nil, on: button)
@@ -98,6 +101,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     }
 
     func popoverDidClose(_ notification: Notification) {
+        popoverController.collapseIntervalOptions()
         stopOutsideClickMonitor()
     }
 
@@ -119,6 +123,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     }
 
     private func closePopover() {
+        popoverController.collapseIntervalOptions()
         if popover.isShown {
             popover.performClose(nil)
         }

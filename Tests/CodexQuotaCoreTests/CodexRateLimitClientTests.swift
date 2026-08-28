@@ -20,17 +20,22 @@ struct CodexRateLimitClientTests {
             Issue.record("无法连接本机 Codex：\(error)")
             return
         }
-        guard case let .success(quota) = await read(client) else {
-            Issue.record("本机 Codex 未返回有效周额度")
+        guard case let .success(snapshot) = await read(client) else {
+            Issue.record("本机 Codex 未返回有效额度快照")
             return
         }
-        #expect((0...100).contains(quota.remainingPercent))
-        #expect(quota.resetsAt > Date())
+        #expect(snapshot.fiveHour != nil)
+        if let fiveHour = snapshot.fiveHour {
+            #expect((0...100).contains(fiveHour.remainingPercent))
+            #expect(fiveHour.resetsAt > Date())
+        }
+        #expect((0...100).contains(snapshot.weekly.remainingPercent))
+        #expect(snapshot.weekly.resetsAt > Date())
         client.stop()
     }
 
-    @Test("完成初始化并读取周额度")
-    func readsWeeklyQuota() async throws {
+    @Test("完成初始化并读取额度快照")
+    func readsQuotaSnapshot() async throws {
         let fakeCodex = try makeFakeCodex(mode: "success")
         defer { try? FileManager.default.removeItem(at: fakeCodex.deletingLastPathComponent()) }
 
@@ -38,11 +43,12 @@ struct CodexRateLimitClientTests {
         #expect(await start(client, binaryURL: fakeCodex) == nil)
 
         let outcome = await read(client)
-        guard case let .success(quota) = outcome else {
+        guard case let .success(snapshot) = outcome else {
             Issue.record("预期成功读取周额度，实际为 \(outcome)")
             return
         }
-        #expect(quota.remainingPercent == 42)
+        #expect(snapshot.fiveHour?.remainingPercent == 75)
+        #expect(snapshot.weekly.remainingPercent == 42)
         client.stop()
     }
 
@@ -80,22 +86,23 @@ struct CodexRateLimitClientTests {
         #expect(message.contains("已退出"))
 
         #expect(await start(client, binaryURL: successfulCodex) == nil)
-        guard case let .success(quota) = await read(client) else {
+        guard case let .success(snapshot) = await read(client) else {
             Issue.record("预期重新连接后成功")
             return
         }
-        #expect(quota.remainingPercent == 42)
+        #expect(snapshot.fiveHour?.remainingPercent == 75)
+        #expect(snapshot.weekly.remainingPercent == 42)
         client.stop()
     }
 
     private enum ReadOutcome: CustomStringConvertible, Sendable {
-        case success(WeeklyQuota)
+        case success(QuotaSnapshot)
         case failure(String)
 
         var description: String {
             switch self {
-            case let .success(quota):
-                return "success(\(quota.remainingPercent))"
+            case let .success(snapshot):
+                return "success(weekly: \(snapshot.weekly.remainingPercent))"
             case let .failure(message):
                 return "failure(\(message))"
             }
@@ -117,7 +124,7 @@ struct CodexRateLimitClientTests {
 
     private func read(_ client: CodexRateLimitClient) async -> ReadOutcome {
         await withCheckedContinuation { continuation in
-            client.readWeeklyQuota { result in
+            client.readQuotaSnapshot { result in
                 switch result {
                 case let .success(quota):
                     continuation.resume(returning: .success(quota))
@@ -152,7 +159,7 @@ struct CodexRateLimitClientTests {
                 if [[ "$mode" == "exit" ]]; then
                     exit 7
                 fi
-                printf '{"id":%s,"result":{"rateLimits":{"primary":{"usedPercent":58,"windowDurationMins":10080,"resetsAt":1900000000},"secondary":null},"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":58,"windowDurationMins":10080,"resetsAt":1900000000},"secondary":null}}}}\n' "$id"
+                printf '{"id":%s,"result":{"rateLimits":{"primary":{"usedPercent":25,"windowDurationMins":300,"resetsAt":1800000000},"secondary":{"usedPercent":58,"windowDurationMins":10080,"resetsAt":1900000000}},"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":25,"windowDurationMins":300,"resetsAt":1800000000},"secondary":{"usedPercent":58,"windowDurationMins":10080,"resetsAt":1900000000}}}}}\n' "$id"
             fi
         done
         """#.replacingOccurrences(of: "__MODE__", with: mode)

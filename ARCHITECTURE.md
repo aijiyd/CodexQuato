@@ -8,7 +8,7 @@ AppMain
       ├─ CodexLifecycleMonitor ──监听──> com.openai.codex
       ├─ CodexBinaryLocator ──定位──> Codex.app/Contents/Resources/codex
       ├─ CodexRateLimitClient ──JSON-RPC──> codex app-server --stdio
-      │   └─ RateLimitParser ──产出──> WeeklyQuota + RateLimitResetCredit
+      │   └─ RateLimitParser ──产出──> QuotaSnapshot + RateLimitResetCredit
       └─ StatusItemController ──绘制──> macOS 状态栏
           └─ QuotaPopoverViewController ──展示──> 时间与设置面板
 ```
@@ -18,8 +18,8 @@ AppMain
 | 文件 | 职责 |
 |---|---|
 | `Package.swift` | 定义 Core、应用和测试三个 Swift target。 |
-| `Sources/CodexQuotaCore/QuotaModels.swift` | 定义周额度、重置卡、显示状态、刷新频率、颜色、短条和 Codex 识别规则。 |
-| `Sources/CodexQuotaCore/RateLimitParser.swift` | 解析 `account/rateLimits/read` 响应，严格提取周额度及可用重置卡并按过期时间排序。 |
+| `Sources/CodexQuotaCore/QuotaModels.swift` | 定义通用额度窗口、双额度快照、重置卡、显示状态、刷新频率、颜色、短条和 Codex 识别规则。 |
+| `Sources/CodexQuotaCore/RateLimitParser.swift` | 解析 `account/rateLimits/read` 响应，按时长提取可选5小时额度、必需周额度及可用重置卡。 |
 | `Sources/CodexQuotaCore/CodexRateLimitClient.swift` | 管理长期 app-server 子进程、请求编号、超时和断线清理。 |
 | `Sources/CodexQuota/AppMain.swift` | 创建无 Dock 图标的 AppKit 应用和主控制器。 |
 | `Sources/CodexQuota/AppController.swift` | 串联生命周期、可配置定时刷新、客户端重连和状态栏更新。 |
@@ -27,7 +27,7 @@ AppMain
 | `Sources/CodexQuota/CodexLifecycleMonitor.swift` | 监听 Codex 应用启动和退出，并过滤无关应用。 |
 | `Sources/CodexQuota/CodexBinaryLocator.swift` | 根据 Codex bundle id 动态定位内置程序。 |
 | `Sources/CodexQuota/StatusItemController.swift` | 绘制紧凑五段状态栏图，并控制详情面板及外部点击关闭。 |
-| `Sources/CodexQuota/QuotaPopoverViewController.swift` | 以菜单式布局显示周额度、进度、重置倒计时、重置时间、重置卡、刷新频率和操作，并按卡片数量计算面板高度。 |
+| `Sources/CodexQuota/QuotaPopoverViewController.swift` | 显示双额度、重置卡、内嵌刷新胶囊和操作，并按可见内容计算面板高度。 |
 | `Sources/CodexQuota/LoginItemRegistrar.swift` | 首次启动时默认注册登录项，并处理系统批准。 |
 | `Resources/Info.plist` | 定义 bundle id、最低系统版本和 `LSUIElement`。 |
 | `Resources/AppIconSource.svg` / `AppIcon.icns` | 保存白底环形额度表图标设计稿与打包资源。 |
@@ -36,18 +36,18 @@ AppMain
 | `Scripts/package_preview.sh` | 构建独立 bundle id 的预览应用，不覆盖正式 ZIP。 |
 | `Scripts/package_dmg.sh` | 生成带应用拖拽入口的HFS磁盘映像，并完成SHA-256校验。 |
 | `.github/workflows/release.yml` | 收到版本标签后，在GitHub的macOS构建机上测试、打包并发布DMG。 |
-| `Tests/CodexQuotaCoreTests/RateLimitParserTests.swift` | 验证周额度解析和所有明确失败分支。 |
+| `Tests/CodexQuotaCoreTests/RateLimitParserTests.swift` | 验证双额度解析、可选5小时窗口和所有明确失败分支。 |
 | `Tests/CodexQuotaCoreTests/QuotaPresentationTests.swift` | 验证颜色、短条和应用识别边界。 |
 | `Tests/CodexQuotaCoreTests/CodexRateLimitClientTests.swift` | 用本地测试进程验证初始化、读取、超时、退出、重连和可选真实冒烟测试。 |
 
 ## 关键决定
 
 - 只使用 Codex 内置 app-server，不直接读取 token，避免复制登录逻辑。
-- 周额度必须精确匹配10080分钟；数据缺失或冲突时显示失败。
+- 周额度必须精确匹配10080分钟；5小时额度只匹配300分钟，完全缺失时允许隐藏，存在但冲突或非法时显示失败。
 - 子进程长连接只在 Codex 运行期间存在，8秒超时后立即终止。
 - 失败状态不保留旧百分比，避免把过期额度误认为当前额度。
 - 后台应用一直运行以感知 Codex 再次启动；状态栏入口按 Codex 生命周期显隐。
-- 刷新频率只允许1秒、5秒、10秒、15秒、30秒、1分钟、2分钟、5分钟、15分钟九个明确值，修改后立即保存并重建定时器。
+- 刷新频率只允许九个明确值，使用两排内嵌胶囊选择，修改后立即保存、收起选择器并重建定时器。
 - 时间信息放入点击面板，不依赖响应较慢的系统悬浮提示。
 - 重置卡只接受 `status=available` 且 `resetType=codexRateLimits` 的记录；声明数量与实际记录不一致时直接报错。
 - 面板高度由 Auto Layout 的实际内容高度计算，零张卡不保留卡片行，有几张卡就增加几行。

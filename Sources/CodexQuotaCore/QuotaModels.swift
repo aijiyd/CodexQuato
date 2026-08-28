@@ -1,17 +1,30 @@
 import Foundation
 
-public struct WeeklyQuota: Equatable, Sendable {
+public struct QuotaWindow: Equatable, Sendable {
     public let remainingPercent: Int
     public let resetsAt: Date
-    public let resetCredits: [RateLimitResetCredit]?
 
     public init(
         remainingPercent: Int,
-        resetsAt: Date,
-        resetCredits: [RateLimitResetCredit]? = nil
+        resetsAt: Date
     ) {
         self.remainingPercent = remainingPercent
         self.resetsAt = resetsAt
+    }
+}
+
+public struct QuotaSnapshot: Equatable, Sendable {
+    public let fiveHour: QuotaWindow?
+    public let weekly: QuotaWindow
+    public let resetCredits: [RateLimitResetCredit]?
+
+    public init(
+        fiveHour: QuotaWindow?,
+        weekly: QuotaWindow,
+        resetCredits: [RateLimitResetCredit]? = nil
+    ) {
+        self.fiveHour = fiveHour
+        self.weekly = weekly
         self.resetCredits = resetCredits
     }
 }
@@ -28,7 +41,7 @@ public struct RateLimitResetCredit: Equatable, Sendable {
 
 public enum QuotaState: Equatable, Sendable {
     case loading
-    case available(WeeklyQuota)
+    case available(QuotaSnapshot)
     case unavailable(String)
 }
 
@@ -93,6 +106,17 @@ public enum RefreshIntervalOption: Int, CaseIterable, Equatable, Sendable {
             return "15 分钟"
         }
     }
+
+    public var compactTitle: String {
+        title.replacingOccurrences(of: " ", with: "")
+    }
+}
+
+public enum RefreshIntervalPresentation {
+    public static let rows: [[RefreshIntervalOption]] = [
+        [.oneSecond, .fiveSeconds, .tenSeconds, .fifteenSeconds, .thirtySeconds],
+        [.oneMinute, .twoMinutes, .fiveMinutes, .fifteenMinutes],
+    ]
 }
 
 public enum CodexLifecycleRule {

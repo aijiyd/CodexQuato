@@ -134,7 +134,7 @@ final class AppController: NSObject {
         }
 
         requestInFlight = true
-        client.readWeeklyQuota { [weak self, weak client] result in
+        client.readQuotaSnapshot { [weak self, weak client] result in
             Task { @MainActor in
                 guard let self, self.codexIsRunning, self.rateLimitClient === client else { return }
                 self.requestInFlight = false

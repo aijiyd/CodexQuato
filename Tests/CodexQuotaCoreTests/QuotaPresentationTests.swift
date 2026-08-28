@@ -41,5 +41,10 @@ struct QuotaPresentationTests {
     func refreshIntervals() {
         #expect(RefreshIntervalOption.allCases.map(\.rawValue) == [1, 5, 10, 15, 30, 60, 120, 300, 900])
         #expect(RefreshIntervalOption.allCases.map(\.title) == ["1 秒", "5 秒", "10 秒", "15 秒", "30 秒", "1 分钟", "2 分钟", "5 分钟", "15 分钟"])
+        #expect(RefreshIntervalOption.allCases.map(\.compactTitle) == ["1秒", "5秒", "10秒", "15秒", "30秒", "1分钟", "2分钟", "5分钟", "15分钟"])
+        #expect(RefreshIntervalPresentation.rows == [
+            [.oneSecond, .fiveSeconds, .tenSeconds, .fifteenSeconds, .thirtySeconds],
+            [.oneMinute, .twoMinutes, .fiveMinutes, .fifteenMinutes],
+        ])
     }
 }

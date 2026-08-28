@@ -31,7 +31,7 @@ public enum CodexRateLimitClientError: LocalizedError, Equatable {
 
 public final class CodexRateLimitClient: @unchecked Sendable {
     public typealias StartCompletion = @Sendable (Result<Void, Error>) -> Void
-    public typealias ReadCompletion = @Sendable (Result<WeeklyQuota, Error>) -> Void
+    public typealias ReadCompletion = @Sendable (Result<QuotaSnapshot, Error>) -> Void
 
     private struct PendingRequest {
         let timeoutWorkItem: DispatchWorkItem
@@ -124,7 +124,7 @@ public final class CodexRateLimitClient: @unchecked Sendable {
         }
     }
 
-    public func readWeeklyQuota(completion: @escaping ReadCompletion) {
+    public func readQuotaSnapshot(completion: @escaping ReadCompletion) {
         queue.async { [self] in
             guard process?.isRunning == true else {
                 completion(.failure(CodexRateLimitClientError.notRunning))
@@ -135,7 +135,7 @@ public final class CodexRateLimitClient: @unchecked Sendable {
                 switch result {
                 case let .success(data):
                     do {
-                        completion(.success(try RateLimitParser.parseWeeklyQuota(from: data)))
+                        completion(.success(try RateLimitParser.parseQuotaSnapshot(from: data)))
                     } catch {
                         completion(.failure(error))
                     }

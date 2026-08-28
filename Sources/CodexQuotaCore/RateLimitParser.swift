@@ -4,10 +4,10 @@ public enum RateLimitParsingError: LocalizedError, Equatable {
     case malformedResponse
     case serverError(String)
     case codexLimitMissing
-    case weeklyWindowMissing
-    case weeklyWindowDuplicated
-    case invalidUsedPercent(Int)
-    case resetTimeMissing
+    case windowMissing(QuotaWindowKind)
+    case windowDuplicated(QuotaWindowKind)
+    case invalidUsedPercent(QuotaWindowKind, Int)
+    case resetTimeMissing(QuotaWindowKind)
     case invalidResetCreditCount(Int)
     case resetCreditCountMismatch(expected: Int, actual: Int)
     case invalidResetCreditExpiration(String)
@@ -20,14 +20,14 @@ public enum RateLimitParsingError: LocalizedError, Equatable {
             return "Codex 返回错误：\(message)"
         case .codexLimitMissing:
             return "Codex 未返回 codex 额度"
-        case .weeklyWindowMissing:
-            return "Codex 未返回周额度"
-        case .weeklyWindowDuplicated:
-            return "Codex 返回了重复的周额度"
-        case let .invalidUsedPercent(value):
-            return "周额度百分比无效：\(value)"
-        case .resetTimeMissing:
-            return "Codex 未返回周额度重置时间"
+        case let .windowMissing(kind):
+            return "Codex 未返回\(kind.displayName)"
+        case let .windowDuplicated(kind):
+            return "Codex 返回了重复的\(kind.displayName)"
+        case let .invalidUsedPercent(kind, value):
+            return "\(kind.displayName)百分比无效：\(value)"
+        case let .resetTimeMissing(kind):
+            return "Codex 未返回\(kind.displayName)重置时间"
         case let .invalidResetCreditCount(value):
             return "重置卡数量无效：\(value)"
         case let .resetCreditCountMismatch(expected, actual):
@@ -38,10 +38,25 @@ public enum RateLimitParsingError: LocalizedError, Equatable {
     }
 }
 
+public enum QuotaWindowKind: Equatable, Sendable {
+    case fiveHour
+    case weekly
+
+    fileprivate var displayName: String {
+        switch self {
+        case .fiveHour:
+            return "5小时额度"
+        case .weekly:
+            return "周额度"
+        }
+    }
+}
+
 public enum RateLimitParser {
+    private static let fiveHourWindowMinutes = 300
     private static let weeklyWindowMinutes = 10_080
 
-    public static func parseWeeklyQuota(from responseData: Data) throws -> WeeklyQuota {
+    public static func parseQuotaSnapshot(from responseData: Data) throws -> QuotaSnapshot {
         let decoder = JSONDecoder()
         let envelope: RPCEnvelope
         do {
@@ -67,31 +82,58 @@ public enum RateLimitParser {
             snapshot = result.rateLimits
         }
 
-        let weeklyWindows = [snapshot.primary, snapshot.secondary]
-            .compactMap { $0 }
-            .filter { $0.windowDurationMins == weeklyWindowMinutes }
-
-        guard !weeklyWindows.isEmpty else {
-            throw RateLimitParsingError.weeklyWindowMissing
-        }
-        guard weeklyWindows.count == 1 else {
-            throw RateLimitParsingError.weeklyWindowDuplicated
-        }
-
-        let weekly = weeklyWindows[0]
-        guard (0...100).contains(weekly.usedPercent) else {
-            throw RateLimitParsingError.invalidUsedPercent(weekly.usedPercent)
-        }
-        guard let resetsAt = weekly.resetsAt, resetsAt > 0 else {
-            throw RateLimitParsingError.resetTimeMissing
+        let windows = [snapshot.primary, snapshot.secondary].compactMap { $0 }
+        let fiveHour = try parseWindow(
+            from: windows,
+            kind: .fiveHour,
+            durationMinutes: fiveHourWindowMinutes,
+            required: false
+        )
+        guard let weekly = try parseWindow(
+            from: windows,
+            kind: .weekly,
+            durationMinutes: weeklyWindowMinutes,
+            required: true
+        ) else {
+            throw RateLimitParsingError.windowMissing(.weekly)
         }
 
         let resetCredits = try result.rateLimitResetCredits.map(parseResetCredits)
 
-        return WeeklyQuota(
-            remainingPercent: 100 - weekly.usedPercent,
-            resetsAt: Date(timeIntervalSince1970: TimeInterval(resetsAt)),
+        return QuotaSnapshot(
+            fiveHour: fiveHour,
+            weekly: weekly,
             resetCredits: resetCredits
+        )
+    }
+
+    private static func parseWindow(
+        from windows: [RateLimitWindow],
+        kind: QuotaWindowKind,
+        durationMinutes: Int,
+        required: Bool
+    ) throws -> QuotaWindow? {
+        let matches = windows.filter { $0.windowDurationMins == durationMinutes }
+        if matches.isEmpty {
+            if required {
+                throw RateLimitParsingError.windowMissing(kind)
+            }
+            return nil
+        }
+        guard matches.count == 1 else {
+            throw RateLimitParsingError.windowDuplicated(kind)
+        }
+
+        let window = matches[0]
+        guard (0...100).contains(window.usedPercent) else {
+            throw RateLimitParsingError.invalidUsedPercent(kind, window.usedPercent)
+        }
+        guard let resetsAt = window.resetsAt, resetsAt > 0 else {
+            throw RateLimitParsingError.resetTimeMissing(kind)
+        }
+        return QuotaWindow(
+            remainingPercent: 100 - window.usedPercent,
+            resetsAt: Date(timeIntervalSince1970: TimeInterval(resetsAt))
         )
     }
 
